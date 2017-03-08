@@ -2156,8 +2156,16 @@ static int dwc3_gadget_init_endpoints(struct dwc3 *dwc, u8 total)
 
 			dep->endpoint.max_streams = 15;
 			dep->endpoint.ops = &dwc3_gadget_ep_ops;
-			list_add_tail(&dep->endpoint.ep_list,
-					&dwc->gadget.ep_list);
+
+			/*
+			 * REVERTME: This is a temporary hack to get Intel
+			 * Edison's USB working with mainline kernel. This hack
+			 * will be reverted once we come to conclusion about how
+			 * to describe Trace endpoints which should be ignored
+			 * by dwc3.
+			 */
+			if (num != 1 && num != 8)
+				list_add_tail(&dep->endpoint.ep_list, &dwc->gadget.ep_list);
 
 			ret = dwc3_alloc_trb_pool(dep);
 			if (ret)
@@ -2168,8 +2176,16 @@ static int dwc3_gadget_init_endpoints(struct dwc3 *dwc, u8 total)
 			usb_ep_set_maxpacket_limit(&dep->endpoint, 1024);
 			dep->endpoint.max_streams = 15;
 			dep->endpoint.ops = &dwc3_gadget_ep_ops;
-			list_add_tail(&dep->endpoint.ep_list,
-					&dwc->gadget.ep_list);
+
+			/*
+			 * REVERTME: This is a temporary hack to get Intel
+			 * Edison's USB working with mainline kernel. This hack
+			 * will be reverted once we come to conclusion about how
+			 * to describe Trace endpoints which should be ignored
+			 * by dwc3.
+			 */
+			if (num != 1 && num != 8)
+				list_add_tail(&dep->endpoint.ep_list, &dwc->gadget.ep_list);
 
 			ret = dwc3_alloc_trb_pool(dep);
 			if (ret)
