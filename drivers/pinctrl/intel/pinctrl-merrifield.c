@@ -347,6 +347,13 @@ static const struct pinctrl_pin_desc mrfld_pins[] = {
 	/* Family 18: Broadcast (0 pins) */
 };
 
+static const unsigned int mrfld_i2c1_pins[] = { 101, 102 };
+static const unsigned int mrfld_i2c2_pins[] = { 103, 104 };
+static const unsigned int mrfld_i2c3_pins[] = { 105, 106 };
+static const unsigned int mrfld_i2c4_pins[] = { 107, 108 };
+static const unsigned int mrfld_i2c5_pins[] = { 109, 110 };
+static const unsigned int mrfld_i2c6_pins[] = { 111, 112 };
+static const unsigned int mrfld_i2c7_pins[] = { 113, 114 };
 static const unsigned int mrfld_sdio_pins[] = { 50, 51, 52, 53, 54, 55, 56 };
 static const unsigned int mrfld_spi5_pins[] = { 90, 91, 92, 93, 94, 95, 96 };
 static const unsigned int mrfld_uart0_pins[] = { 115, 116, 117, 118 };
@@ -358,6 +365,15 @@ static const unsigned int mrfld_pwm2_pins[] = { 132 };
 static const unsigned int mrfld_pwm3_pins[] = { 133 };
 
 static const struct intel_pingroup mrfld_groups[] = {
+	PIN_GROUP("i2c1_grp", mrfld_i2c1_pins, 1),
+	PIN_GROUP("i2c2_grp", mrfld_i2c2_pins, 1),
+	PIN_GROUP("i2c3_grp", mrfld_i2c3_pins, 1),
+	PIN_GROUP("i2c4_grp", mrfld_i2c4_pins, 1),
+	PIN_GROUP("i2c5_grp", mrfld_i2c5_pins, 1),
+	PIN_GROUP("i2c6_grp", mrfld_i2c6_pins, 1),
+	PIN_GROUP("i2c7_grp", mrfld_i2c7_pins, 1),
+	PIN_GROUP("i2c8_grp", mrfld_i2c6_pins, 2),
+	PIN_GROUP("i2c9_grp", mrfld_i2c7_pins, 2),
 	PIN_GROUP("sdio_grp", mrfld_sdio_pins, 1),
 	PIN_GROUP("spi5_grp", mrfld_spi5_pins, 1),
 	PIN_GROUP("uart0_grp", mrfld_uart0_pins, 1),
@@ -369,6 +385,13 @@ static const struct intel_pingroup mrfld_groups[] = {
 	PIN_GROUP("pwm3_grp", mrfld_pwm3_pins, 1),
 };
 
+static const char * const mrfld_i2c1_groups[] = { "i2c1_grp" };
+static const char * const mrfld_i2c2_groups[] = { "i2c2_grp" };
+static const char * const mrfld_i2c3_groups[] = { "i2c3_grp" };
+static const char * const mrfld_i2c4_groups[] = { "i2c4_grp" };
+static const char * const mrfld_i2c5_groups[] = { "i2c5_grp" };
+static const char * const mrfld_i2c6_groups[] = { "i2c6_grp", "i2c8_grp" };
+static const char * const mrfld_i2c7_groups[] = { "i2c7_grp", "i2c9_grp" };
 static const char * const mrfld_sdio_groups[] = { "sdio_grp" };
 static const char * const mrfld_spi5_groups[] = { "spi5_grp" };
 static const char * const mrfld_uart0_groups[] = { "uart0_grp" };
@@ -380,6 +403,13 @@ static const char * const mrfld_pwm2_groups[] = { "pwm2_grp" };
 static const char * const mrfld_pwm3_groups[] = { "pwm3_grp" };
 
 static const struct intel_function mrfld_functions[] = {
+	FUNCTION("i2c1", mrfld_i2c1_groups),
+	FUNCTION("i2c2", mrfld_i2c2_groups),
+	FUNCTION("i2c3", mrfld_i2c3_groups),
+	FUNCTION("i2c4", mrfld_i2c4_groups),
+	FUNCTION("i2c5", mrfld_i2c5_groups),
+	FUNCTION("i2c6", mrfld_i2c6_groups),
+	FUNCTION("i2c7", mrfld_i2c7_groups),
 	FUNCTION("sdio", mrfld_sdio_groups),
 	FUNCTION("spi5", mrfld_spi5_groups),
 	FUNCTION("uart0", mrfld_uart0_groups),
