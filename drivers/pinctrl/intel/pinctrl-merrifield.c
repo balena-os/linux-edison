@@ -456,15 +456,15 @@ static const struct mrfld_family *mrfld_get_family(struct mrfld_pinctrl *mp,
 	return NULL;
 }
 
-static bool mrfld_buf_available(struct mrfld_pinctrl *mp, unsigned int pin)
+static int mrfld_buf_available(struct mrfld_pinctrl *mp, unsigned int pin)
 {
 	const struct mrfld_family *family;
 
 	family = mrfld_get_family(mp, pin);
 	if (!family)
-		return false;
+		return -EINVAL;
 
-	return family->protected == PROTECTED_NONE;
+	return family->protected == PROTECTED_NONE ? 0 : -EACCES;
 }
 
 static void __iomem *mrfld_get_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin)
@@ -483,9 +483,11 @@ static void __iomem *mrfld_get_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin
 static int mrfld_read_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin, u32 *value)
 {
 	void __iomem *bufcfg;
+	int ret;
 
-	if (!mrfld_buf_available(mp, pin))
-		return -EBUSY;
+	ret = mrfld_buf_available(mp, pin);
+	if (ret < 0)
+		return ret;
 
 	bufcfg = mrfld_get_bufcfg(mp, pin);
 	*value = readl(bufcfg);
@@ -599,14 +601,16 @@ static int mrfld_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	u32 mask = BUFCFG_PINMODE_MASK;
 	unsigned long flags;
 	unsigned int i;
+	int ret;
 
 	/*
 	 * All pins in the groups needs to be accessible and writable
 	 * before we can enable the mux for this group.
 	 */
 	for (i = 0; i < grp->npins; i++) {
-		if (!mrfld_buf_available(mp, grp->pins[i]))
-			return -EBUSY;
+		ret = mrfld_buf_available(mp, grp->pins[i]);
+		if (ret < 0)
+			return ret;
 	}
 
 	/* Now enable the mux setting for each pin in the group */
@@ -626,9 +630,11 @@ static int mrfld_gpio_request_enable(struct pinctrl_dev *pctldev,
 	u32 bits = BUFCFG_PINMODE_GPIO << BUFCFG_PINMODE_SHIFT;
 	u32 mask = BUFCFG_PINMODE_MASK;
 	unsigned long flags;
+	int ret;
 
-	if (!mrfld_buf_available(mp, pin))
-		return -EBUSY;
+	ret = mrfld_buf_available(mp, pin);
+	if (ret < 0)
+		return ret;
 
 	raw_spin_lock_irqsave(&mp->lock, flags);
 	mrfld_update_bufcfg(mp, pin, bits, mask);
@@ -808,7 +814,8 @@ static int mrfld_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 	unsigned int i;
 	int ret;
 
-	if (!mrfld_buf_available(mp, pin))
+	ret = mrfld_buf_available(mp, pin);
+	if (ret < 0)
 		return -ENOTSUPP;
 
 	for (i = 0; i < nconfigs; i++) {
