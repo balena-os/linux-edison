@@ -55,36 +55,38 @@
 #define BUFCFG_OUTDATAOV_MASK		GENMASK(19, 18)
 #define BUFCFG_OD_EN			BIT(21)
 
+enum mrfld_protected {
+	PROTECTED_NONE,
+	PROTECTED_READ,
+	PROTECTED_WRITE,
+	PROTECTED_FULL,
+};
+
 /**
  * struct mrfld_family - Intel pin family description
  * @barno: MMIO BAR number where registers for this family reside
  * @pin_base: Starting pin of pins in this family
  * @npins: Number of pins in this family
- * @protected: True if family is protected by access
+ * @protected: Level of protection if family is protected by access
  * @regs: family specific common registers
  */
 struct mrfld_family {
 	unsigned int barno;
 	unsigned int pin_base;
 	size_t npins;
-	bool protected;
+	enum mrfld_protected protected;
 	void __iomem *regs;
 };
 
-#define MRFLD_FAMILY(b, s, e)				\
+#define MRFLD_FAMILY_PROTECTED(b, s, e, _p_)		\
 	{						\
 		.barno = (b),				\
 		.pin_base = (s),			\
 		.npins = (e) - (s) + 1,			\
+		.protected = PROTECTED_##_p_,		\
 	}
 
-#define MRFLD_FAMILY_PROTECTED(b, s, e)			\
-	{						\
-		.barno = (b),				\
-		.pin_base = (s),			\
-		.npins = (e) - (s) + 1,			\
-		.protected = true,			\
-	}
+#define MRFLD_FAMILY(b, s, e)	MRFLD_FAMILY_PROTECTED(b, s, e, NONE)
 
 static const struct pinctrl_pin_desc mrfld_pins[] = {
 	/* Family 0: OCP2SSC (0 pins) */
@@ -392,12 +394,12 @@ static const struct mrfld_family mrfld_families[] = {
 	MRFLD_FAMILY(4, 57, 64),
 	MRFLD_FAMILY(5, 65, 78),
 	MRFLD_FAMILY(6, 79, 100),
-	MRFLD_FAMILY_PROTECTED(7, 101, 114),
+	MRFLD_FAMILY_PROTECTED(7, 101, 114, WRITE),
 	MRFLD_FAMILY(8, 115, 126),
 	MRFLD_FAMILY(9, 127, 145),
 	MRFLD_FAMILY(10, 146, 157),
 	MRFLD_FAMILY(11, 158, 179),
-	MRFLD_FAMILY_PROTECTED(12, 180, 194),
+	MRFLD_FAMILY_PROTECTED(12, 180, 194, FULL),
 	MRFLD_FAMILY(13, 195, 214),
 	MRFLD_FAMILY(14, 215, 227),
 	MRFLD_FAMILY(15, 228, 232),
@@ -462,7 +464,7 @@ static bool mrfld_buf_available(struct mrfld_pinctrl *mp, unsigned int pin)
 	if (!family)
 		return false;
 
-	return !family->protected;
+	return family->protected == PROTECTED_NONE;
 }
 
 static void __iomem *mrfld_get_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin)
