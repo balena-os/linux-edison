@@ -19,6 +19,8 @@
 #include <linux/pinctrl/pinctrl.h>
 #include <linux/pinctrl/pinmux.h>
 
+#include <asm/intel_scu_ipc.h>
+
 #include "pinctrl-intel.h"
 
 #define MRFLD_FAMILY_NR			64
@@ -69,6 +71,7 @@ enum mrfld_protected {
  * @npins: Number of pins in this family
  * @protected: Level of protection if family is protected by access
  * @regs: family specific common registers
+ * @phys: Physical address of family specific common registers
  */
 struct mrfld_family {
 	unsigned int barno;
@@ -76,6 +79,7 @@ struct mrfld_family {
 	size_t npins;
 	enum mrfld_protected protected;
 	void __iomem *regs;
+	phys_addr_t phys;
 };
 
 #define MRFLD_FAMILY_PROTECTED(b, s, e, _p_)		\
@@ -464,7 +468,7 @@ static int mrfld_buf_available(struct mrfld_pinctrl *mp, unsigned int pin)
 	if (!family)
 		return -EINVAL;
 
-	return family->protected == PROTECTED_NONE ? 0 : -EACCES;
+	return family->protected == PROTECTED_FULL ? -EACCES : family->protected;
 }
 
 static void __iomem *mrfld_get_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin)
@@ -508,6 +512,36 @@ static void mrfld_update_bufcfg(struct mrfld_pinctrl *mp, unsigned int pin,
 	value |= bits & mask;
 
 	writel(value, bufcfg);
+}
+
+static phys_addr_t mrfld_get_phys(struct mrfld_pinctrl *mp, unsigned int pin)
+{
+	const struct mrfld_family *family;
+	unsigned int bufno;
+
+	family = mrfld_get_family(mp, pin);
+	if (!family)
+		return 0;
+
+	bufno = pin_to_bufno(family, pin);
+	return family->phys + BUFCFG_OFFSET + bufno * 4;
+}
+
+static int mrfld_update_phys(struct mrfld_pinctrl *mp, unsigned int pin,
+			     u32 bits, u32 mask)
+{
+	int cmd = IPCMSG_INDIRECT_WRITE;
+	void __iomem *bufcfg;
+	phys_addr_t phys;
+	u32 v, value;
+
+	bufcfg = mrfld_get_bufcfg(mp, pin);
+	value = readl(bufcfg);
+
+	v = (value & ~mask) | (bits & mask);
+
+	phys = mrfld_get_phys(mp, pin);
+	return intel_scu_ipc_raw_command(cmd, 0, (u8 *)&v, 4, NULL, 0, phys, 0);
 }
 
 static int mrfld_get_groups_count(struct pinctrl_dev *pctldev)
@@ -599,6 +633,7 @@ static int mrfld_pinmux_set_mux(struct pinctrl_dev *pctldev,
 	const struct intel_pingroup *grp = &mp->groups[group];
 	u32 bits = grp->mode << BUFCFG_PINMODE_SHIFT;
 	u32 mask = BUFCFG_PINMODE_MASK;
+	bool protected = false;
 	unsigned long flags;
 	unsigned int i;
 	int ret;
@@ -611,6 +646,14 @@ static int mrfld_pinmux_set_mux(struct pinctrl_dev *pctldev,
 		ret = mrfld_buf_available(mp, grp->pins[i]);
 		if (ret < 0)
 			return ret;
+		if (ret > 0)
+			protected = true;
+	}
+
+	if (protected) {
+		for (i = 0; i < grp->npins; i++)
+			mrfld_update_phys(mp, grp->pins[i], bits, mask);
+		return 0;
 	}
 
 	/* Now enable the mux setting for each pin in the group */
@@ -635,6 +678,8 @@ static int mrfld_gpio_request_enable(struct pinctrl_dev *pctldev,
 	ret = mrfld_buf_available(mp, pin);
 	if (ret < 0)
 		return ret;
+	if (ret > 0)
+		return mrfld_update_phys(mp, pin, bits, mask);
 
 	raw_spin_lock_irqsave(&mp->lock, flags);
 	mrfld_update_bufcfg(mp, pin, bits, mask);
@@ -735,7 +780,7 @@ static int mrfld_config_get(struct pinctrl_dev *pctldev, unsigned int pin,
 }
 
 static int mrfld_config_set_pin(struct mrfld_pinctrl *mp, unsigned int pin,
-				unsigned long config)
+				unsigned long config, bool protected)
 {
 	unsigned int param = pinconf_to_config_param(config);
 	unsigned int arg = pinconf_to_config_argument(config);
@@ -800,6 +845,9 @@ static int mrfld_config_set_pin(struct mrfld_pinctrl *mp, unsigned int pin,
 		break;
 	}
 
+	if (protected)
+		return mrfld_update_phys(mp, pin, bits, mask);
+
 	raw_spin_lock_irqsave(&mp->lock, flags);
 	mrfld_update_bufcfg(mp, pin, bits, mask);
 	raw_spin_unlock_irqrestore(&mp->lock, flags);
@@ -811,12 +859,15 @@ static int mrfld_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 			    unsigned long *configs, unsigned int nconfigs)
 {
 	struct mrfld_pinctrl *mp = pinctrl_dev_get_drvdata(pctldev);
+	bool protected = false;
 	unsigned int i;
 	int ret;
 
 	ret = mrfld_buf_available(mp, pin);
 	if (ret < 0)
 		return -ENOTSUPP;
+	if (ret > 0)
+		protected = true;
 
 	for (i = 0; i < nconfigs; i++) {
 		switch (pinconf_to_config_param(configs[i])) {
@@ -825,7 +876,7 @@ static int mrfld_config_set(struct pinctrl_dev *pctldev, unsigned int pin,
 		case PIN_CONFIG_BIAS_PULL_DOWN:
 		case PIN_CONFIG_DRIVE_OPEN_DRAIN:
 		case PIN_CONFIG_SLEW_RATE:
-			ret = mrfld_config_set_pin(mp, pin, configs[i]);
+			ret = mrfld_config_set_pin(mp, pin, configs[i], protected);
 			if (ret)
 				return ret;
 			break;
@@ -929,6 +980,7 @@ static int mrfld_pinctrl_probe(struct platform_device *pdev)
 		struct mrfld_family *family = &families[i];
 
 		family->regs = regs + family->barno * MRFLD_FAMILY_LEN;
+		family->phys = mem->start + family->barno * MRFLD_FAMILY_LEN;
 	}
 
 	mp->families = families;
