@@ -14,6 +14,7 @@
 #include <asm/intel-family.h>
 #include <asm/msr.h>
 #include <asm/param.h>
+#include <asm/tsc.h>
 
 #define MAX_NUM_FREQS	9
 
