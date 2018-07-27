@@ -15,6 +15,18 @@
 #include "core.h"
 #include "gadget.h"
 
+#include <asm/intel_scu_ipc.h>
+
+#define BCOVE_USBIDCTRL		0x19
+#define BCOVE_USBIDCTRL_ID	BIT(0)
+#define BCOVE_USBIDCTRL_ACA	BIT(1)
+
+#define BCOVE_USBIDSTS		0x1a
+#define BCOVE_USBIDSTS_GND	BIT(0)
+#define BCOVE_USBIDSTS_RARBRC	GENMASK(2, 1)
+#define BCOVE_USBIDSTS_FLOAT	BIT(3)
+#define BCOVE_USBIDSTS_SHORT	BIT(4)
+
 static void dwc3_otg_disable_events(struct dwc3 *dwc, u32 disable_mask)
 {
 	u32 reg = dwc3_readl(dwc->regs, DWC3_OEVTEN);
@@ -347,6 +359,33 @@ void dwc3_otg_update(struct dwc3 *dwc, bool ignore_idstatus)
 
 		dwc->desired_otg_role = id ? DWC3_OTG_ROLE_DEVICE :
 					DWC3_OTG_ROLE_HOST;
+	}
+
+	if (!ignore_idstatus) {
+		u8 value;
+
+		value = BCOVE_USBIDCTRL_ID | BCOVE_USBIDCTRL_ACA;
+		ret = intel_scu_ipc_iowrite8(BCOVE_USBIDCTRL, value);
+		if (ret)
+			dev_warn(dwc->dev, "Can't write USBIDCTRL: %d\n", ret);
+
+		/* Debounce time 30ms, though Intel Android x86 has 50ms */
+		msleep(50);
+
+		ret = intel_scu_ipc_ioread8(BCOVE_USBIDSTS, &value);
+		if (ret) {
+			dev_warn(dwc->dev, "Can't read USBIDSTS: %d\n", ret);
+			return;
+		}
+
+		dev_info(dwc->dev, "PMIC USB ID pin status: %02x\n", value);
+
+		dwc->desired_otg_role = (value & BCOVE_USBIDSTS_GND) ?
+					DWC3_OTG_ROLE_DEVICE : DWC3_OTG_ROLE_HOST;
+
+		ret = intel_scu_ipc_iowrite8(BCOVE_USBIDCTRL, 0);
+		if (ret)
+			dev_warn(dwc->dev, "Can't write USBIDCTRL: %d\n", ret);
 	}
 
 	if (dwc->desired_otg_role == dwc->current_otg_role)
